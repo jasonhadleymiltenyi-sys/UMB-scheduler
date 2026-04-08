@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Miltenyi Biotec – Demo Scheduler</title>
+<!--
+================================================================
+MILTENYI BIOTEC DEMO SCHEDULER  v2
+================================================================
+SETUP (one-time, ~5 minutes):
+
+STEP 1 — Deploy the Google Apps Script backend
+  1. Go to https://script.google.com → New Project
+  2. Delete default code, paste everything from AppScript.gs
+  3. Save → Deploy → New Deployment
+  4. Click gear icon next to "Type" → choose "Web app"
+  5. Execute as: Me
+  6. Who has access: Anyone
+  7. Click Deploy → Copy the Web App URL
+
+STEP 2 — Paste the URL below
+  Replace "YOUR_APPS_SCRIPT_URL" with the copied URL
+
+STEP 3 — Open this HTML file in a browser — done!
+================================================================
+-->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#E2001A;--red-dark:#b80015;--red-light:#fde8eb;
+  --white:#ffffff;--gray-50:#f8f8f8;--gray-100:#f0f0f0;
+  --gray-200:#e0e0e0;--gray-300:#cccccc;--gray-400:#aaaaaa;
+  --gray-500:#888888;--gray-600:#666666;--gray-700:#444444;--gray-900:#1a1a1a;
+  --taken:#8b8b8b;--taken-bg:#ececec;--blocked-bg:#d9d9d9;
+  --fm:'Barlow',sans-serif;--fc:'Barlow Condensed',sans-serif;
+  --s1:0 1px 3px rgba(0,0,0,.08);--s2:0 4px 12px rgba(0,0,0,.10);--s3:0 8px 32px rgba(0,0,0,.14);
+  --r:6px;--rl:10px;--tr:.2s ease;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fm);background:var(--gray-50);color:var(--gray-900);font-size:15px;line-height:1.5;min-height:100vh}
+#app-header{background:var(--white);border-bottom:3px solid var(--red);box-shadow:var(--s1);position:sticky;top:0;z-index:100}
+.hdr{max-width:1100px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:64px}
+.logo-wrap{display:flex;align-items:center;gap:14px}
+.logo-text .l1{font-family:var(--fc);font-weight:800;font-size:23px;color:var(--red);letter-spacing:-.5px;text-transform:uppercase}
+.logo-text .l2{font-family:var(--fc);font-weight:600;font-size:23px;color:var(--gray-900);letter-spacing:-.5px;text-transform:uppercase}
+.logo-div{width:1px;height:28px;background:var(--gray-200);margin:0 14px}
+.logo-tag{font-size:11px;color:var(--gray-400);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+#admin-btn{background:none;border:1.5px solid var(--gray-300);padding:6px 14px;border-radius:var(--r);font-size:13px;font-family:var(--fm);font-weight:500;color:var(--gray-600);cursor:pointer;transition:var(--tr);display:flex;align-items:center;gap:6px}
+#admin-btn:hover{border-color:var(--red);color:var(--red)}
+#admin-btn.active{background:var(--red);border-color:var(--red);color:#fff}
+#loading{position:fixed;inset:0;background:rgba(255,255,255,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px}
+#loading.h{display:none}
+.spin{width:40px;height:40px;border:3px solid var(--gray-200);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-txt{font-size:14px;color:var(--gray-600);font-weight:500}
+#toasts{position:fixed;bottom:28px;right:28px;z-index:9998;display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--gray-900);color:#fff;padding:12px 18px;border-radius:var(--r);font-size:14px;font-weight:500;box-shadow:var(--s2);animation:tIn .3s ease;display:flex;align-items:center;gap:8px;min-width:260px;max-width:380px}
+.toast.ok{background:#1a7340}.toast.err{background:var(--red-dark)}.toast.inf{background:#1a4a7a}
+@keyframes tIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+#modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center;padding:20px}
+#modal-bg.h{display:none}
+.modal{background:var(--white);border-radius:var(--rl);box-shadow:var(--s3);width:100%;max-width:460px;padding:32px;position:relative;animation:mIn .25s ease}
+@keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.modal-title{font-family:var(--fc);font-size:22px;font-weight:700;margin-bottom:22px}
+.modal-x{position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;font-size:20px;color:var(--gray-400);line-height:1;padding:4px 8px;border-radius:var(--r);transition:var(--tr)}
+.modal-x:hover{background:var(--gray-100);color:var(--gray-700)}
+.fg{margin-bottom:18px}
+.fg label{display:block;font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px}
+.fg label .req{color:var(--red);margin-left:2px}
+.fg label .opt{color:var(--gray-400);font-weight:400;font-size:11px;text-transform:none}
+input[type=text],input[type=email],input[type=tel],input[type=date],input[type=time],input[type=password],textarea,select{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r);font-family:var(--fm);font-size:14px;color:var(--gray-900);background:var(--white);transition:border-color var(--tr);outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--red)}
+textarea{resize:vertical;min-height:80px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:600px){.fr{grid-template-columns:1fr}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 20px;border-radius:var(--r);font-family:var(--fm);font-size:14px;font-weight:600;cursor:pointer;border:2px solid transparent;transition:var(--tr);white-space:nowrap}
+.btn-p{background:var(--red);color:#fff;border-color:var(--red)}.btn-p:hover{background:var(--red-dark);border-color:var(--red-dark)}.btn-p:disabled{background:var(--gray-300);border-color:var(--gray-300);cursor:not-allowed}
+.btn-s{background:var(--white);color:var(--gray-700);border-color:var(--gray-300)}.btn-s:hover{border-color:var(--gray-600);color:var(--gray-900)}
+.btn-d{background:var(--white);color:var(--red);border-color:var(--red)}.btn-d:hover{background:var(--red);color:#fff}
+.btn-g{background:none;border-color:transparent;color:var(--gray-600);padding:6px 10px}.btn-g:hover{background:var(--gray-100);color:var(--gray-900)}
+.btn-sm{padding:6px 14px;font-size:13px}.btn-lg{padding:14px 28px;font-size:15px}.btn-full{width:100%}
+.btn-icon{padding:6px;border-radius:var(--r);min-width:32px;height:32px}
+#main{max-width:1100px;margin:0 auto;padding:32px 24px 60px}
+.ptitle{margin-bottom:28px}
+.ptitle h1{font-family:var(--fc);font-size:32px;font-weight:800;letter-spacing:-.3px}
+.ptitle p{margin-top:6px;font-size:15px;color:var(--gray-600)}
+.tz-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-500);background:var(--gray-100);border-radius:100px;padding:3px 10px;margin-top:8px;font-weight:500}
+.tabs{display:flex;border-bottom:2px solid var(--gray-200);margin-bottom:28px}
+.tab-btn{padding:10px 22px;font-family:var(--fm);font-size:14px;font-weight:600;color:var(--gray-500);background:none;border:none;cursor:pointer;transition:var(--tr);border-bottom:3px solid transparent;margin-bottom:-2px}
+.tab-btn.active{color:var(--red);border-bottom-color:var(--red)}.tab-btn:hover:not(.active){color:var(--gray-700)}
+.tab-panel{display:none}.tab-panel.active{display:block}
+.card{background:var(--white);border:1px solid var(--gray-200);border-radius:var(--rl);padding:24px;box-shadow:var(--s1);margin-bottom:20px}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.card-title{font-family:var(--fc);font-size:17px;font-weight:700}
+.day-card{background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--rl);margin-bottom:16px;overflow:hidden}
+.day-card-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);gap:12px}
+.day-lbl{font-weight:700;font-size:15px;font-family:var(--fc)}
+.day-body{padding:16px 18px}
+.blk-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--gray-200);margin-bottom:8px;background:var(--white);transition:var(--tr)}
+.blk-row:hover{border-color:var(--gray-300)}
+.blk-info{flex:1;min-width:0}
+.blk-lbl{font-weight:600;font-size:14px}
+.blk-time{font-size:13px;color:var(--gray-500);margin-top:2px}
+.badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:100px}
+.badge-av{background:#e6f4ec;color:#1a7340}.badge-bl{background:var(--gray-200);color:var(--gray-600)}.badge-tk{background:#fde8eb;color:var(--red)}
+.sched-sec{margin-bottom:32px}
+.sched-sec h2{font-family:var(--fc);font-size:22px;font-weight:700;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--gray-200);display:flex;align-items:center;gap:10px}
+.date-tag{font-size:13px;font-weight:500;color:var(--gray-500);background:var(--gray-100);padding:2px 10px;border-radius:100px}
+.blocks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.bc{border:2px solid var(--gray-200);border-radius:var(--rl);padding:18px 16px;cursor:pointer;background:var(--white);transition:all var(--tr);position:relative;overflow:hidden}
+.bc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gray-200);transition:var(--tr)}
+.bc.av:hover{border-color:var(--red);box-shadow:var(--s2)}.bc.av:hover::before{background:var(--red)}
+.bc.sel{border-color:var(--red);background:var(--red-light)}.bc.sel::before{background:var(--red)}
+.bc.tk{cursor:not-allowed;background:var(--taken-bg);border-color:var(--gray-200)}.bc.tk::before{background:var(--taken)}
+.bc.bl{cursor:not-allowed;background:var(--blocked-bg);border-color:var(--gray-300)}.bc.bl::before{background:var(--gray-400)}
+.bc-lbl{font-weight:700;font-size:15px;margin-bottom:4px}
+.bc.tk .bc-lbl,.bc.bl .bc-lbl{color:var(--gray-500)}
+.bc-time{font-size:13px;color:var(--gray-500)}
+.bc-status{margin-top:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.bc.tk .bc-status{color:var(--taken)}.bc.bl .bc-status{color:var(--gray-500)}.bc.av .bc-status{color:var(--gray-400)}.bc.sel .bc-status{color:var(--red)}
+.bc-check{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;opacity:0;transition:var(--tr)}
+.bc.sel .bc-check{opacity:1}
+#signup-form-sec{background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--rl);padding:28px;margin-top:32px;box-shadow:var(--s1)}
+#signup-form-sec h2{font-family:var(--fc);font-size:22px;font-weight:700;margin-bottom:6px}
+#signup-form-sec .sub{color:var(--gray-500);font-size:14px;margin-bottom:22px}
+.ssl-box{background:var(--red-light);border:1.5px solid var(--red);border-radius:var(--r);padding:14px 16px;margin-bottom:22px}
+.ssl-title{font-size:13px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px}
+.ssl-item{font-size:13px;color:var(--gray-700);padding:2px 0;display:flex;align-items:center;gap:6px}
+.toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.sw{position:relative;display:inline-block;width:44px;height:24px}
+.sw input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:var(--gray-300);border-radius:24px;transition:var(--tr)}
+.slider::before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--white);border-radius:50%;transition:var(--tr)}
+input:checked+.slider{background:var(--red)}
+input:checked+.slider::before{transform:translateX(20px)}
+.toggle-lbl{font-size:14px;font-weight:500;color:var(--gray-700)}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.stat{background:var(--white);border:1px solid var(--gray-200);border-radius:var(--rl);padding:18px 20px;box-shadow:var(--s1)}
+.stat-val{font-family:var(--fc);font-size:34px;font-weight:800;color:var(--red);line-height:1}
+.stat-lbl{font-size:12px;color:var(--gray-500);font-weight:500;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.tbl-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap}
+.ftabs{display:flex;gap:4px}
+.ftab{padding:6px 14px;border-radius:100px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--gray-200);background:var(--white);color:var(--gray-600);transition:var(--tr)}
+.ftab.active{background:var(--red);border-color:var(--red);color:#fff}
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--gray-200)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead tr{background:var(--gray-50)}
+th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gray-500);white-space:nowrap;border-bottom:1px solid var(--gray-200)}
+td{padding:11px 14px;border-bottom:1px solid var(--gray-100);color:var(--gray-700);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--gray-50)}
+.s-active{color:#1a7340;font-weight:600}.s-cancelled{color:var(--gray-400);font-weight:600}
+.set-sec{margin-bottom:28px}
+.set-sec h3{font-family:var(--fc);font-weight:700;font-size:17px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--gray-200)}
+.share-row{display:flex;gap:10px;align-items:stretch}
+.share-row input{flex:1;background:var(--gray-50);color:var(--gray-600)}
+.banner{background:var(--red-light);border:2px solid var(--red);border-radius:var(--rl);padding:20px 24px;display:flex;align-items:center;gap:16px;margin-bottom:24px}
+.banner-icon{font-size:28px}
+.banner-text h3{font-weight:700;color:var(--red);font-size:16px}
+.banner-text p{font-size:14px;color:var(--gray-600);margin-top:3px}
+.banner.grey{background:var(--gray-100);border-color:var(--gray-300)}
+.banner.grey h3{color:var(--gray-700)}.banner.grey p{color:var(--gray-500)}
+#view-login{display:flex;align-items:center;justify-content:center;min-height:60vh}
+.login-card{background:var(--white);border:1px solid var(--gray-200);border-radius:var(--rl);padding:40px;width:100%;max-width:400px;box-shadow:var(--s3);text-align:center}
+.login-card h2{font-family:var(--fc);font-size:24px;font-weight:700;margin-bottom:6px}
+.login-card p{color:var(--gray-500);font-size:14px;margin-bottom:24px}
+.login-err{color:var(--red);font-size:13px;margin-top:10px;display:none}
+.sec-top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:28px;flex-wrap:wrap}
+.empty{text-align:center;padding:48px 24px;color:var(--gray-400)}
+.empty-ico{font-size:40px;margin-bottom:12px}
+.empty p{font-size:14px;font-weight:500}
+@media(max-width:700px){.hdr{padding:0 16px}#main{padding:20px 16px 48px}.blocks-grid{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}.tbl-bar{flex-direction:column;align-items:flex-start}}
+@media(max-width:400px){.blocks-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spin"></div><div class="load-txt" id="load-txt">Connecting…</div></div>
+<div id="toasts"></div>
+<div id="modal-bg" class="h"><div class="modal"><button class="modal-x" onclick="closeModal()">✕</button><div id="modal-content"></div></div></div>
+
+<header id="app-header">
+  <div class="hdr">
+    <div class="logo-wrap">
+      <div class="logo-text"><span class="l1">Miltenyi</span><span class="l2">&nbsp;Imaging</span></div>
+      <div class="logo-div"></div>
+      <div class="logo-tag">Demo Scheduler</div>
+    </div>
+    <button id="admin-btn" onclick="handleAdminToggle()"><span>⚙</span><span id="admin-btn-lbl">Admin</span></button>
+  </div>
+</header>
+
+<div id="main">
+
+  <!-- LOGIN -->
+  <div id="view-login" style="display:none">
+    <div class="login-card">
+      <div style="margin-bottom:24px"><div class="logo-text" style="justify-content:center;display:flex"><span class="l1">Miltenyi</span><span class="l2">&nbsp;Imaging</span></div></div>
+      <h2>Admin Login</h2><p>Enter your admin password to manage the schedule</p>
+      <div class="fg"><label>Password <span class="req">*</span></label><input type="password" id="pw" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn btn-p btn-full" onclick="doLogin()">Sign In</button>
+      <div class="login-err" id="login-err">Incorrect password. Please try again.</div>
+    </div>
+  </div>
+
+  <!-- PARTICIPANT VIEW -->
+  <div id="view-p" style="display:none">
+    <div class="ptitle"><h1 id="p-title">Demo Schedule</h1><p id="p-desc"></p><div class="tz-badge">🕐 <span id="p-tz">America/New_York</span></div></div>
+    <div id="full-banner" class="banner" style="display:none"><div class="banner-icon">🚫</div><div class="banner-text"><h3>Schedule is Full</h3><p>All available spots have been taken. Please contact the organizer.</p></div></div>
+    <div id="p-sched"></div>
+    <div id="signup-form-sec" style="display:none">
+      <h2>Complete Your Sign-Up</h2><p class="sub">Fill in your details below to confirm your selected time slot(s)</p>
+      <div id="ssl-preview" class="ssl-box"></div>
+      <div class="fr">
+        <div class="fg"><label>Full Name <span class="req">*</span></label><input type="text" id="f-name" placeholder="Your full name"></div>
+        <div class="fg"><label>Email Address <span class="req">*</span></label><input type="email" id="f-email" placeholder="your@email.com"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label>Phone Number <span class="opt">(optional)</span></label><input type="tel" id="f-phone" placeholder="+1 (555) 000-0000"></div>
+        <div class="fg"><label>Notes <span class="opt">(optional)</span></label><input type="text" id="f-notes" placeholder="Any special requests or notes"></div>
+      </div>
+      <div class="toggle-row"><label class="sw"><input type="checkbox" id="lab-tog" onchange="toggleLab()"><span class="slider"></span></label><span class="toggle-lbl">Signing up as a Lab Group</span></div>
+      <div id="lab-field" class="fg" style="display:none"><label>Lab Group Name <span class="req">*</span></label><input type="text" id="f-lab" placeholder="e.g., Smith Lab — Cell Biology"></div>
+      <button class="btn btn-p btn-lg" onclick="submitSignup()">✓ &nbsp;Confirm Sign-Up</button>
+    </div>
+    <div id="no-days-p" class="empty" style="display:none"><div class="empty-ico">📅</div><p>No schedule available yet. Check back soon.</p></div>
+  </div>
+
+  <!-- EDIT / CANCEL VIEW -->
+  <div id="view-edit" style="display:none">
+    <div class="ptitle"><h1>Manage Your Sign-Up</h1><p>Edit or cancel your existing sign-up below.</p></div>
+    <div id="edit-expired" class="banner" style="display:none"><div class="banner-icon">⏰</div><div class="banner-text"><h3>Editing Window Closed</h3><p>Sign-ups can only be edited or cancelled more than 24 hours before the earliest booked slot.</p></div></div>
+    <div id="edit-cancelled" class="banner grey" style="display:none"><div class="banner-icon">✕</div><div class="banner-text"><h3>Already Cancelled</h3><p>This sign-up has already been cancelled.</p></div></div>
+    <div id="edit-area" style="display:none">
+      <div class="card"><div class="card-hdr"><div class="card-title">Current Sign-Up</div></div><div id="cur-info"></div></div>
+      <div id="edit-sched"></div>
+      <div class="card">
+        <h2 style="font-family:var(--fc);font-size:20px;font-weight:700;margin-bottom:16px">Update Details</h2>
+        <div id="ssl-preview-e" class="ssl-box" style="margin-bottom:18px"></div>
+        <div class="fr">
+          <div class="fg"><label>Full Name <span class="req">*</span></label><input type="text" id="e-name"></div>
+          <div class="fg"><label>Email <span class="req">*</span></label><input type="email" id="e-email"></div>
+        </div>
+        <div class="fr">
+          <div class="fg"><label>Phone <span class="opt">(optional)</span></label><input type="tel" id="e-phone"></div>
+          <div class="fg"><label>Notes <span class="opt">(optional)</span></label><input type="text" id="e-notes"></div>
+        </div>
+        <div class="toggle-row"><label class="sw"><input type="checkbox" id="e-lab-tog" onchange="toggleLabE()"><span class="slider"></span></label><span class="toggle-lbl">Signing up as a Lab Group</span></div>
+        <div id="e-lab-field" class="fg" style="display:none"><label>Lab Group Name <span class="req">*</span></label><input type="text" id="e-lab"></div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-p" onclick="submitEdit()">✓ Save Changes</button>
+          <button class="btn btn-d" onclick="confirmCancel()">✕ Cancel My Sign-Up</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
+  <div id="view-admin" style="display:none">
+    <div class="sec-top">
+      <div class="ptitle" style="margin-bottom:0"><h1>Admin Dashboard</h1><p>Manage your demo schedule and sign-ups</p></div>
+      <button class="btn btn-s" onclick="doLogout()">Sign Out</button>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('sched')">📅 Schedule</button>
+      <button class="tab-btn" onclick="switchTab('sups')">👥 Sign-Ups</button>
+      <button class="tab-btn" onclick="switchTab('set')">⚙ Settings</button>
+    </div>
+    <div id="tab-sched" class="tab-panel active">
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">Schedule Info</div></div>
+        <div class="fr">
+          <div class="fg"><label>Title</label><input type="text" id="a-title" placeholder="e.g., UMB Flow Cytometry Demo Week" oninput="S.schedule.title=this.value"></div>
+          <div class="fg"><label>Description</label><input type="text" id="a-desc" placeholder="Brief description" oninput="S.schedule.description=this.value"></div>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="saveNow()">💾 Save</button>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">Days &amp; Time Blocks</div><button class="btn btn-p btn-sm" onclick="openAddDay()">＋ Add Day</button></div>
+        <div id="days-list"></div>
+        <div id="no-days-a" class="empty" style="display:none"><div class="empty-ico">📅</div><p>No days added yet. Click "Add Day" to get started.</p></div>
+      </div>
+    </div>
+    <div id="tab-sups" class="tab-panel">
+      <div class="stats" id="stats"></div>
+      <div class="card" style="margin-bottom:0">
+        <div class="tbl-bar">
+          <div class="ftabs"><button class="ftab active" onclick="filt('all',this)">All</button><button class="ftab" onclick="filt('active',this)">Active</button><button class="ftab" onclick="filt('cancelled',this)">Cancelled</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-s btn-sm" onclick="refreshSups()">↻ Refresh</button>
+            <button class="btn btn-s btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+            <button class="btn btn-d btn-sm" onclick="deleteExpired()">🗑 Delete Expired</button>
+          </div>
+        </div>
+        <div class="tbl-wrap"><table><thead><tr><th>Name / Lab Group</th><th>Email</th><th>Phone</th><th>Slots</th><th>Notes</th><th>Signed Up</th><th>Status</th><th>Actions</th></tr></thead><tbody id="sups-tbody"></tbody></table></div>
+        <div id="no-sups" class="empty" style="display:none"><div class="empty-ico">📋</div><p>No sign-ups yet.</p></div>
+      </div>
+    </div>
+    <div id="tab-set" class="tab-panel">
+      <div class="card">
+        <div class="set-sec"><h3>Time Zone</h3><div class="fg"><label>Display Time Zone</label>
+          <select id="a-tz" onchange="S.schedule.timezone=this.value">
+            <option value="America/New_York">Eastern Time (ET)</option><option value="America/Chicago">Central Time (CT)</option>
+            <option value="America/Denver">Mountain Time (MT)</option><option value="America/Los_Angeles">Pacific Time (PT)</option>
+            <option value="America/Anchorage">Alaska Time</option><option value="Pacific/Honolulu">Hawaii Time</option>
+            <option value="Europe/London">GMT – London</option><option value="Europe/Paris">CET – Paris</option>
+            <option value="Europe/Berlin">CET – Berlin</option><option value="Asia/Tokyo">JST – Tokyo</option>
+            <option value="Asia/Singapore">SGT – Singapore</option><option value="Australia/Sydney">AET – Sydney</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </div></div>
+        <div class="set-sec"><h3>Expiration &amp; Capacity</h3>
+          <div class="fr">
+            <div class="fg"><label>Expiration Date <span class="opt">(auto-delete after)</span></label><input type="date" id="a-exp" onchange="S.schedule.expirationDate=this.value"></div>
+            <div class="fg"><label>Max Participants</label><input type="text" id="a-max" onchange="S.schedule.maxParticipants=parseInt(this.value)||30"></div>
+          </div>
+        </div>
+        <div class="set-sec"><h3>Share Link</h3>
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:10px">Share this link with participants to let them book a slot.</p>
+          <div class="share-row"><input type="text" id="share-link" readonly><button class="btn btn-s" onclick="copyLink()">📋 Copy</button></div>
+        </div>
+        <button class="btn btn-p" onclick="saveNow()">💾 Save All Settings</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ================================================================
+// ⚙ CONFIG — set APPS_SCRIPT_URL after deploying AppScript.gs
+// ================================================================
+const CFG = {
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzHN5gXlJuD6tW7KBb3W9MnO7ayUgt9_wwz9c8bs9X5vST3t8HCG0TgprHedQ5AdOhS/exec",
+  ADMIN_PASSWORD: "admin",
+  ADMIN_EMAIL: "jasonhadley.miltenyi@gmail.com",
+  EMAILJS_SERVICE_ID: "service_hhk1p88",
+  EMAILJS_PARTICIPANT_TEMPLATE_ID: "template_xqw5y9q",
+  EMAILJS_ADMIN_TEMPLATE_ID: "template_c0302bv",
+  EMAILJS_PUBLIC_KEY: "Kkj-FTxon3VKXe_st",
+  TIMEZONE: "America/New_York",
+  MAX_PARTICIPANTS: 30
+};
+
+const S = { schedule:null, signups:[], isAdmin:false, selSlots:[], editSlots:[], curEdit:null, editToken:null, supFilter:'all', pollTimer:null };
+
+// ── API ──────────────────────────────────────────────────────────
+async function api(params) {
+  if (!CFG.APPS_SCRIPT_URL || CFG.APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL')
+    throw new Error('APPS_SCRIPT_URL not set. See setup instructions in HTML comments.');
+  const gets = ['getSchedule','getSignups','ping'];
+  if (gets.includes(params.action)) {
+    const url = CFG.APPS_SCRIPT_URL + '?' + new URLSearchParams(params);
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    const d = await r.json(); if (d.error) throw new Error(d.error); return d;
+  } else {
+    const r = await fetch(CFG.APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify(params) });
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    const d = await r.json(); if (d.error) throw new Error(d.error); return d;
+  }
+}
+
+async function loadAll() {
+  const [a,b] = await Promise.all([api({action:'getSchedule'}), api({action:'getSignups'})]);
+  S.schedule = a.schedule || defSched();
+  S.signups  = b.signups  || [];
+}
+async function saveSched() { await api({action:'saveSchedule', data:S.schedule}); }
+async function saveSignup(su) { await api({action:'saveSignup', data:su}); const i=S.signups.findIndex(x=>x.id===su.id); if(i>=0)S.signups[i]=su; else S.signups.push(su); }
+function defSched(){ return {title:'Demo Schedule',description:'Please select your preferred demo time slot(s).',timezone:CFG.TIMEZONE,expirationDate:'',maxParticipants:CFG.MAX_PARTICIPANTS,days:[]}; }
+
+// ── HELPERS ──────────────────────────────────────────────────────
+const gid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const gtoken = () => Array.from(crypto.getRandomValues(new Uint8Array(20))).map(b=>b.toString(16).padStart(2,'0')).join('');
+const sid = (d,b) => `${d}::${b}`;
+const psid = s => { const p=s.split('::'); return {dayId:p[0],blockId:p[1]}; };
+function esc(s){ return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''; }
+function getSlotDisplay(s){ const {dayId,blockId}=psid(s); const day=S.schedule.days.find(d=>d.id===dayId),blk=day?.blocks.find(b=>b.id===blockId); if(!day||!blk)return s; return `${day.label}  —  ${blk.label} (${fmt12(blk.startTime)}–${fmt12(blk.endTime)})`; }
+function fmt12(t){ if(!t)return''; const[h,m]=t.split(':').map(Number); return `${h%12||12}${m?':'+String(m).padStart(2,'0'):''}${h>=12?' PM':' AM'}`; }
+function fmtDate(d){ if(!d)return''; try{return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(e){return d;} }
+function fmtTs(ts){ if(!ts)return'—'; try{return new Date(ts).toLocaleString('en-US',{timeZone:S.schedule.timezone,month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});}catch(e){return ts;} }
+const isTaken = (d,b) => S.signups.some(s=>s.status==='active'&&s.slots.includes(sid(d,b)));
+const activeCnt = () => S.signups.filter(s=>s.status==='active').length;
+const isFull = () => activeCnt() >= (S.schedule.maxParticipants||30);
+
+// ── EMAIL ────────────────────────────────────────────────────────
+const initEmail = () => { try{emailjs.init(CFG.EMAILJS_PUBLIC_KEY);}catch(e){} };
+const slotsText = slots => slots.map(s=>getSlotDisplay(s)).join('\n');
+async function sendParticipantEmail(su,action){ try{await emailjs.send(CFG.EMAILJS_SERVICE_ID,CFG.EMAILJS_PARTICIPANT_TEMPLATE_ID,{to_name:su.isLabGroup?su.labGroupName:su.name,to_email:su.email,event_title:S.schedule.title,action_type:action,selected_slots:slotsText(su.slots),edit_link:window.location.href.split('?')[0]+'?token='+su.editToken,participant_name:su.name,lab_group:su.isLabGroup?su.labGroupName:'N/A',timezone:S.schedule.timezone});}catch(e){console.warn('Email err',e);} }
+async function sendAdminEmail(su,action){ try{await emailjs.send(CFG.EMAILJS_SERVICE_ID,CFG.EMAILJS_ADMIN_TEMPLATE_ID,{to_email:CFG.ADMIN_EMAIL,event_title:S.schedule.title,action_type:action,participant_name:su.name,participant_email:su.email,participant_phone:su.phone||'Not provided',is_lab_group:su.isLabGroup?'Yes':'No',lab_group_name:su.labGroupName||'N/A',selected_slots:slotsText(su.slots),notes:su.notes||'None',timestamp:new Date(su.timestamp).toLocaleString('en-US',{timeZone:S.schedule.timezone})});}catch(e){console.warn('Email err',e);} }
+
+// ── UI ───────────────────────────────────────────────────────────
+function showLoad(msg){document.getElementById('load-txt').textContent=msg||'Loading…';document.getElementById('loading').classList.remove('h');}
+function hideLoad(){document.getElementById('loading').classList.add('h');}
+function toast(msg,type='inf'){const tc=document.getElementById('toasts'),t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span>${{ok:'✓',err:'✕',inf:'ℹ'}[type]}</span> ${msg}`;tc.appendChild(t);setTimeout(()=>{t.style.cssText='opacity:0;transform:translateY(8px);transition:.3s';setTimeout(()=>t.remove(),300);},4000);}
+function showModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-bg').classList.remove('h');}
+function closeModal(){document.getElementById('modal-bg').classList.add('h');document.getElementById('modal-content').innerHTML='';}
+function showView(id){['view-login','view-p','view-edit','view-admin'].forEach(v=>document.getElementById(v).style.display='none');document.getElementById(id).style.display='';}
+function setAdminBtn(on){document.getElementById('admin-btn').classList.toggle('active',on);document.getElementById('admin-btn-lbl').textContent=on?'Admin View':'Admin';}
+function switchTab(n){const ns=['sched','sups','set'];document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',ns[i]===n));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.getElementById(`tab-${n}`).classList.add('active');if(n==='sups')renderSupsTab();if(n==='set')renderSetTab();}
+
+// ── AUTH ─────────────────────────────────────────────────────────
+function handleAdminToggle(){if(S.isAdmin){showView('view-admin');}else{showView('view-login');document.getElementById('pw').value='';document.getElementById('login-err').style.display='none';setTimeout(()=>document.getElementById('pw').focus(),100);}}
+function doLogin(){if(document.getElementById('pw').value===CFG.ADMIN_PASSWORD){S.isAdmin=true;setAdminBtn(true);showView('view-admin');renderAdminSched();renderSupsTab();renderSetTab();startPoll();}else{document.getElementById('login-err').style.display='block';}}
+function doLogout(){S.isAdmin=false;setAdminBtn(false);stopPoll();showView('view-p');renderP();}
+
+// ── ADMIN SCHEDULE ───────────────────────────────────────────────
+function renderAdminSched(){
+  const sch=S.schedule;
+  const aTitleEl=document.getElementById('a-title'); if(aTitleEl)aTitleEl.value=sch.title||'';
+  const aDescEl=document.getElementById('a-desc'); if(aDescEl)aDescEl.value=sch.description||'';
+  const list=document.getElementById('days-list'),noMsg=document.getElementById('no-days-a');
+  if(!sch.days?.length){list.innerHTML='';noMsg.style.display='';return;}
+  noMsg.style.display='none';
+  list.innerHTML=sch.days.map(day=>`
+    <div class="day-card">
+      <div class="day-card-hdr">
+        <div><div class="day-lbl">${esc(day.label)}</div>${day.date?`<div style="font-size:12px;color:var(--gray-400);margin-top:2px">${esc(day.date)}</div>`:''}</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-s btn-sm" onclick="openEditDay('${day.id}')">✏ Edit</button>
+          <button class="btn btn-s btn-sm" onclick="openAddBlk('${day.id}')">＋ Block</button>
+          <button class="btn btn-g btn-icon" onclick="confirmDelDay('${day.id}')">🗑</button>
+        </div>
+      </div>
+      <div class="day-body">
+        ${!day.blocks.length?`<div style="font-size:13px;color:var(--gray-400);padding:8px 0">No time blocks yet. Click "+ Block".</div>`:
+          day.blocks.map(b=>`<div class="blk-row">
+            <div class="blk-info"><div class="blk-lbl">${esc(b.label)}</div><div class="blk-time">${fmt12(b.startTime)} – ${fmt12(b.endTime)}</div></div>
+            <span class="badge ${b.status==='blocked'?'badge-bl':isTaken(day.id,b.id)?'badge-tk':'badge-av'}">${b.status==='blocked'?'Blocked':isTaken(day.id,b.id)?'Taken':'Available'}</span>
+            <button class="btn btn-g btn-icon" onclick="openEditBlk('${day.id}','${b.id}')">✏</button>
+            <button class="btn btn-g btn-icon" onclick="toggleBlk('${day.id}','${b.id}')" title="${b.status==='blocked'?'Unblock':'Block'}">${b.status==='blocked'?'🔓':'🔒'}</button>
+            <button class="btn btn-g btn-icon" onclick="confirmDelBlk('${day.id}','${b.id}')">🗑</button>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function openAddDay(){showModal(`<div class="modal-title">Add New Day</div><div class="fg"><label>Day Label <span class="req">*</span></label><input type="text" id="md-lbl" placeholder="e.g., Monday, Nov 18"></div><div class="fg"><label>Date <span class="opt">(optional)</span></label><input type="date" id="md-date"></div><div style="display:flex;gap:10px;margin-top:4px"><button class="btn btn-p" onclick="addDay()">Add Day</button><button class="btn btn-s" onclick="closeModal()">Cancel</button></div>`);setTimeout(()=>document.getElementById('md-lbl').focus(),50);}
+function openEditDay(id){const d=S.schedule.days.find(x=>x.id===id);showModal(`<div class="modal-title">Edit Day</div><div class="fg"><label>Label <span class="req">*</span></label><input type="text" id="md-lbl" value="${esc(d.label)}"></div><div class="fg"><label>Date <span class="opt">(optional)</span></label><input type="date" id="md-date" value="${d.date||''}"></div><div style="display:flex;gap:10px;margin-top:4px"><button class="btn btn-p" onclick="saveEditDay('${id}')">Save</button><button class="btn btn-s" onclick="closeModal()">Cancel</button></div>`);}
+function openAddBlk(dayId){const d=S.schedule.days.find(x=>x.id===dayId);showModal(`<div class="modal-title">Add Block to "${esc(d.label)}"</div><div class="fg"><label>Label <span class="req">*</span></label><input type="text" id="mb-lbl" placeholder="e.g., Morning Demo Session"></div><div class="fr"><div class="fg"><label>Start <span class="req">*</span></label><input type="time" id="mb-s" value="09:00"></div><div class="fg"><label>End <span class="req">*</span></label><input type="time" id="mb-e" value="12:00"></div></div><div style="display:flex;gap:10px;margin-top:4px"><button class="btn btn-p" onclick="addBlk('${dayId}')">Add Block</button><button class="btn btn-s" onclick="closeModal()">Cancel</button></div>`);setTimeout(()=>document.getElementById('mb-lbl').focus(),50);}
+function openEditBlk(dayId,blkId){const d=S.schedule.days.find(x=>x.id===dayId),b=d.blocks.find(x=>x.id===blkId);showModal(`<div class="modal-title">Edit Block</div><div class="fg"><label>Label <span class="req">*</span></label><input type="text" id="mb-lbl" value="${esc(b.label)}"></div><div class="fr"><div class="fg"><label>Start <span class="req">*</span></label><input type="time" id="mb-s" value="${b.startTime}"></div><div class="fg"><label>End <span class="req">*</span></label><input type="time" id="mb-e" value="${b.endTime}"></div></div><div style="display:flex;gap:10px;margin-top:4px"><button class="btn btn-p" onclick="saveEditBlk('${dayId}','${blkId}')">Save</button><button class="btn btn-s" onclick="closeModal()">Cancel</button></div>`);}
+
+async function addDay(){const l=document.getElementById('md-lbl').value.trim();if(!l){alert('Enter a day label.');return;}S.schedule.days.push({id:gid(),label:l,date:document.getElementById('md-date').value||'',blocks:[]});await saveSched();closeModal();renderAdminSched();toast('Day added','ok');}
+async function saveEditDay(id){const l=document.getElementById('md-lbl').value.trim();if(!l){alert('Enter a label.');return;}const d=S.schedule.days.find(x=>x.id===id);d.label=l;d.date=document.getElementById('md-date').value||'';await saveSched();closeModal();renderAdminSched();toast('Day updated','ok');}
+function confirmDelDay(id){const d=S.schedule.days.find(x=>x.id===id);if(confirm(`Delete day "${d.label}" and all its blocks?`))delDay(id);}
+async function delDay(id){S.schedule.days=S.schedule.days.filter(d=>d.id!==id);await saveSched();renderAdminSched();toast('Day deleted','inf');}
+async function addBlk(dayId){const l=document.getElementById('mb-lbl').value.trim(),s=document.getElementById('mb-s').value,e=document.getElementById('mb-e').value;if(!l||!s||!e){alert('Fill in all fields.');return;}S.schedule.days.find(d=>d.id===dayId).blocks.push({id:gid(),label:l,startTime:s,endTime:e,status:'available'});await saveSched();closeModal();renderAdminSched();toast('Block added','ok');}
+async function saveEditBlk(dayId,blkId){const l=document.getElementById('mb-lbl').value.trim(),s=document.getElementById('mb-s').value,e=document.getElementById('mb-e').value;if(!l||!s||!e){alert('Fill in all fields.');return;}const b=S.schedule.days.find(d=>d.id===dayId).blocks.find(b=>b.id===blkId);b.label=l;b.startTime=s;b.endTime=e;await saveSched();closeModal();renderAdminSched();toast('Block updated','ok');}
+async function toggleBlk(dayId,blkId){const b=S.schedule.days.find(d=>d.id===dayId).blocks.find(b=>b.id===blkId);b.status=b.status==='blocked'?'available':'blocked';await saveSched();renderAdminSched();toast(`Block ${b.status}`,'inf');}
+function confirmDelBlk(dayId,blkId){const b=S.schedule.days.find(d=>d.id===dayId).blocks.find(b=>b.id===blkId);if(confirm(`Delete block "${b.label}"?`))delBlk(dayId,blkId);}
+async function delBlk(dayId,blkId){S.schedule.days.find(d=>d.id===dayId).blocks=S.schedule.days.find(d=>d.id===dayId).blocks.filter(b=>b.id!==blkId);await saveSched();renderAdminSched();toast('Block deleted','inf');}
+async function saveNow(){showLoad('Saving…');try{const t=document.getElementById('a-title');if(t)S.schedule.title=t.value;const d2=document.getElementById('a-desc');if(d2)S.schedule.description=d2.value;await saveSched();toast('Saved!','ok');}catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}}
+
+// ── PARTICIPANT ──────────────────────────────────────────────────
+function renderP(){
+  const sch=S.schedule;
+  document.getElementById('p-title').textContent=sch.title||'Demo Schedule';
+  document.getElementById('p-desc').textContent=sch.description||'';
+  document.getElementById('p-tz').textContent=sch.timezone||CFG.TIMEZONE;
+  document.getElementById('full-banner').style.display=isFull()?'':'none';
+  const con=document.getElementById('p-sched'),noMsg=document.getElementById('no-days-p');
+  if(!sch.days?.length){con.innerHTML='';noMsg.style.display='';document.getElementById('signup-form-sec').style.display='none';return;}
+  noMsg.style.display='none';
+  con.innerHTML=sch.days.map(day=>`<div class="sched-sec"><h2>${esc(day.label)} ${day.date?`<span class="date-tag">${fmtDate(day.date)}</span>`:''}</h2><div class="blocks-grid">${day.blocks.map(b=>{const tk=isTaken(day.id,b.id),bl=b.status==='blocked',sel=S.selSlots.includes(sid(day.id,b.id));let cls='bc ',lbl='';if(bl){cls+='bl';lbl='Unavailable';}else if(tk){cls+='tk';lbl='Taken';}else if(sel){cls+='sel av';lbl='Selected ✓';}else{cls+='av';lbl='Available';}return`<div class="${cls}" ${!bl&&!tk&&!isFull()?`onclick="toggleSlot('${day.id}','${b.id}')"`:''}><div class="bc-check">✓</div><div class="bc-lbl">${esc(b.label)}</div><div class="bc-time">${fmt12(b.startTime)} – ${fmt12(b.endTime)}</div><div class="bc-status">${lbl}</div></div>`;}).join('')}</div></div>`).join('');
+  updateForm();
+}
+function toggleSlot(d,b){if(isFull()&&!S.selSlots.includes(sid(d,b)))return;const s=sid(d,b),i=S.selSlots.indexOf(s);if(i>=0)S.selSlots.splice(i,1);else S.selSlots.push(s);renderP();}
+function updateForm(){const fs=document.getElementById('signup-form-sec');if(!S.selSlots.length){fs.style.display='none';return;}fs.style.display='';document.getElementById('ssl-preview').innerHTML=`<div class="ssl-title">Selected Slots (${S.selSlots.length})</div>${S.selSlots.map(s=>`<div class="ssl-item">📌 ${getSlotDisplay(s)}</div>`).join('')}`;}
+function toggleLab(){document.getElementById('lab-field').style.display=document.getElementById('lab-tog').checked?'':'none';}
+
+async function submitSignup(){
+  const name=document.getElementById('f-name').value.trim(),email=document.getElementById('f-email').value.trim(),phone=document.getElementById('f-phone').value.trim(),notes=document.getElementById('f-notes').value.trim(),isLab=document.getElementById('lab-tog').checked,lab=document.getElementById('f-lab').value.trim();
+  if(!name||!email){toast('Name and email are required.','err');return;}
+  if(!/\S+@\S+\.\S+/.test(email)){toast('Please enter a valid email.','err');return;}
+  if(isLab&&!lab){toast('Enter your lab group name.','err');return;}
+  if(!S.selSlots.length){toast('Select at least one slot.','err');return;}
+  if(isFull()){toast('Sorry, the schedule is full.','err');return;}
+  showLoad('Submitting…');
+  try{
+    const su={id:gid(),name,email,phone,notes,isLabGroup:isLab,labGroupName:isLab?lab:'',slots:[...S.selSlots],timestamp:new Date().toISOString(),editToken:gtoken(),status:'active'};
+    await saveSignup(su);
+    await sendParticipantEmail(su,'New Sign-Up');
+    await sendAdminEmail(su,'New Sign-Up');
+    toast('Sign-up confirmed! Check your email.','ok');
+    S.selSlots=[];
+    ['f-name','f-email','f-phone','f-notes','f-lab'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('lab-tog').checked=false;document.getElementById('lab-field').style.display='none';
+    renderP();
+  }catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}
+}
+
+// ── EDIT / CANCEL ────────────────────────────────────────────────
+async function loadEditView(token){
+  S.editToken=token;showView('view-edit');
+  const su=S.signups.find(s=>s.editToken===token);
+  if(!su){toast('Sign-up not found.','err');showView('view-p');return;}
+  S.curEdit=su;
+  if(su.status==='cancelled'){document.getElementById('edit-cancelled').style.display='';document.getElementById('edit-area').style.display='none';return;}
+  const earliest=getEarliest(su.slots);
+  if(earliest&&(earliest-Date.now())<86400000){document.getElementById('edit-expired').style.display='';document.getElementById('edit-area').style.display='none';return;}
+  document.getElementById('edit-area').style.display='';
+  document.getElementById('cur-info').innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px"><div><strong>Name:</strong> ${esc(su.name)}</div><div><strong>Email:</strong> ${esc(su.email)}</div>${su.phone?`<div><strong>Phone:</strong> ${esc(su.phone)}</div>`:''} ${su.isLabGroup?`<div><strong>Lab:</strong> ${esc(su.labGroupName)}</div>`:''}<div style="grid-column:1/-1"><strong>Current Slots:</strong><br>${su.slots.map(s=>`<div style="margin-top:4px;color:var(--gray-600)">📌 ${getSlotDisplay(s)}</div>`).join('')}</div></div>`;
+  document.getElementById('e-name').value=su.name;document.getElementById('e-email').value=su.email;document.getElementById('e-phone').value=su.phone||'';document.getElementById('e-notes').value=su.notes||'';document.getElementById('e-lab-tog').checked=su.isLabGroup;document.getElementById('e-lab').value=su.labGroupName||'';document.getElementById('e-lab-field').style.display=su.isLabGroup?'':'none';
+  S.editSlots=[...su.slots];renderEditSched();
+}
+function getEarliest(slots){let e=null;for(const s of slots){const{dayId,blockId}=psid(s);const d=S.schedule.days.find(x=>x.id===dayId),b=d?.blocks.find(x=>x.id===blockId);if(d?.date&&b?.startTime){const dt=new Date(`${d.date}T${b.startTime}`);if(!e||dt<e)e=dt;}}return e;}
+function renderEditSched(){
+  const con=document.getElementById('edit-sched');if(!S.schedule.days?.length){con.innerHTML='';return;}
+  con.innerHTML=`<h3 style="font-family:var(--fc);font-size:18px;font-weight:700;margin:24px 0 14px">Change Your Slots</h3>`+S.schedule.days.map(day=>`<div class="sched-sec"><h2>${esc(day.label)} ${day.date?`<span class="date-tag">${fmtDate(day.date)}</span>`:''}</h2><div class="blocks-grid">${day.blocks.map(b=>{const tOther=S.signups.some(su=>su.status==='active'&&su.id!==S.curEdit.id&&su.slots.includes(sid(day.id,b.id))),bl=b.status==='blocked',sel=S.editSlots.includes(sid(day.id,b.id));let cls='bc ',lbl='';if(bl){cls+='bl';lbl='Unavailable';}else if(tOther){cls+='tk';lbl='Taken';}else if(sel){cls+='sel av';lbl='Selected ✓';}else{cls+='av';lbl='Available';}return`<div class="${cls}" ${!bl&&!tOther?`onclick="toggleEditSlot('${day.id}','${b.id}')"`:''}><div class="bc-check">✓</div><div class="bc-lbl">${esc(b.label)}</div><div class="bc-time">${fmt12(b.startTime)} – ${fmt12(b.endTime)}</div><div class="bc-status">${lbl}</div></div>`;}).join('')}</div></div>`).join('');
+  const prev=document.getElementById('ssl-preview-e');prev.innerHTML=S.editSlots.length?`<div class="ssl-title">Selected (${S.editSlots.length})</div>${S.editSlots.map(s=>`<div class="ssl-item">📌 ${getSlotDisplay(s)}</div>`).join('')}`:`<div class="ssl-title" style="color:var(--gray-500)">No slots selected</div>`;
+}
+function toggleEditSlot(d,b){const s=sid(d,b),i=S.editSlots.indexOf(s);if(i>=0)S.editSlots.splice(i,1);else S.editSlots.push(s);renderEditSched();}
+function toggleLabE(){document.getElementById('e-lab-field').style.display=document.getElementById('e-lab-tog').checked?'':'none';}
+async function submitEdit(){
+  const name=document.getElementById('e-name').value.trim(),email=document.getElementById('e-email').value.trim(),phone=document.getElementById('e-phone').value.trim(),notes=document.getElementById('e-notes').value.trim(),isLab=document.getElementById('e-lab-tog').checked,lab=document.getElementById('e-lab').value.trim();
+  if(!name||!email){toast('Name and email required.','err');return;}if(!S.editSlots.length){toast('Select at least one slot.','err');return;}if(isLab&&!lab){toast('Enter lab group name.','err');return;}
+  showLoad('Saving…');try{const upd={...S.curEdit,name,email,phone,notes,isLabGroup:isLab,labGroupName:isLab?lab:'',slots:[...S.editSlots]};await saveSignup(upd);await sendParticipantEmail(upd,'Sign-Up Updated');await sendAdminEmail(upd,'Sign-Up Updated');toast('Sign-up updated!','ok');setTimeout(()=>{showView('view-p');renderP();},1500);}catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}
+}
+function confirmCancel(){if(confirm('Cancel your sign-up? This cannot be undone.'))doCancel();}
+async function doCancel(){showLoad('Cancelling…');try{const upd={...S.curEdit,status:'cancelled',slots:[]};await saveSignup(upd);await sendParticipantEmail(upd,'Sign-Up Cancelled');await sendAdminEmail(upd,'Sign-Up Cancelled');toast('Sign-up cancelled.','inf');document.getElementById('edit-area').style.display='none';document.getElementById('edit-cancelled').style.display='';}catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}}
+
+// ── ADMIN SIGNUPS ────────────────────────────────────────────────
+function renderSupsTab(){renderStats();renderSupsTable(S.supFilter||'all');}
+function renderStats(){const a=S.signups.filter(s=>s.status==='active').length,c=S.signups.filter(s=>s.status==='cancelled').length,tot=S.schedule.days.reduce((n,d)=>n+d.blocks.filter(b=>b.status!=='blocked').length,0),tk=S.schedule.days.reduce((n,d)=>n+d.blocks.filter(b=>isTaken(d.id,b.id)).length,0);document.getElementById('stats').innerHTML=`<div class="stat"><div class="stat-val">${a}</div><div class="stat-lbl">Active Sign-Ups</div></div><div class="stat"><div class="stat-val">${(S.schedule.maxParticipants||30)-a}</div><div class="stat-lbl">Spots Remaining</div></div><div class="stat"><div class="stat-val">${tk}/${tot}</div><div class="stat-lbl">Slots Taken</div></div><div class="stat"><div class="stat-val">${c}</div><div class="stat-lbl">Cancelled</div></div>`;}
+function filt(f,btn){S.supFilter=f;document.querySelectorAll('.ftab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderSupsTable(f);}
+function renderSupsTable(f){let list=S.signups;if(f==='active')list=list.filter(s=>s.status==='active');if(f==='cancelled')list=list.filter(s=>s.status==='cancelled');const tbody=document.getElementById('sups-tbody'),noMsg=document.getElementById('no-sups');if(!list.length){tbody.innerHTML='';noMsg.style.display='';return;}noMsg.style.display='none';tbody.innerHTML=list.map(s=>`<tr><td><div style="font-weight:600">${esc(s.name)}</div>${s.isLabGroup?`<div style="font-size:12px;color:var(--gray-500)">Lab: ${esc(s.labGroupName)}</div>`:''}</td><td>${esc(s.email)}</td><td>${esc(s.phone||'—')}</td><td style="max-width:220px">${s.slots.map(x=>`<div style="font-size:12px;margin-bottom:2px">📌 ${esc(getSlotDisplay(x))}</div>`).join('')}</td><td style="max-width:150px;font-size:13px">${esc(s.notes||'—')}</td><td style="font-size:12px;white-space:nowrap">${fmtTs(s.timestamp)}</td><td><span class="s-${s.status}">${s.status.charAt(0).toUpperCase()+s.status.slice(1)}</span></td><td>${s.status==='active'?`<button class="btn btn-d btn-sm" onclick="adminCancel('${s.id}')">Cancel</button>`:''}</td></tr>`).join('');}
+async function adminCancel(id){if(!confirm('Cancel this sign-up?'))return;showLoad('Cancelling…');try{const upd={...S.signups.find(s=>s.id===id),status:'cancelled',slots:[]};await saveSignup(upd);await sendAdminEmail(upd,'Cancelled by Admin');toast('Cancelled','inf');renderSupsTab();renderAdminSched();}catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}}
+async function refreshSups(){showLoad('Refreshing…');try{const r=await api({action:'getSignups'});S.signups=r.signups||[];renderSupsTab();renderAdminSched();toast('Refreshed','ok');}catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}}
+function exportCSV(){const list=S.signups.filter(s=>S.supFilter==='all'||s.status===S.supFilter);const hdr=['Name','Email','Phone','Is Lab Group','Lab Group Name','Slots','Notes','Timestamp','Status'];const rows=list.map(s=>[s.name,s.email,s.phone||'',s.isLabGroup?'Yes':'No',s.labGroupName||'',s.slots.map(x=>getSlotDisplay(x)).join(' | '),s.notes||'',s.timestamp,s.status]);const csv=[hdr,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`${(S.schedule.title||'schedule').replace(/[^a-z0-9]/gi,'_')}_signups.csv`;a.click();toast('CSV downloaded','ok');}
+async function deleteExpired(){const exp=S.schedule.expirationDate;if(!exp){toast('No expiration date set in Settings.','err');return;}const expD=new Date(exp+'T23:59:59');if(expD>new Date()){toast(`Expiration date (${exp}) hasn't passed yet.`,'inf');return;}if(!confirm(`Delete all data before ${exp}?`))return;showLoad('Deleting…');try{for(const s of S.signups){if(new Date(s.timestamp)<=expD)await saveSignup({...s,status:'cancelled',slots:[]});}toast('Expired data cleared','ok');renderSupsTab();}catch(e){toast('Error: '+e.message,'err');}finally{hideLoad();}}
+
+// ── SETTINGS ─────────────────────────────────────────────────────
+function renderSetTab(){const tz=document.getElementById('a-tz');if(tz)tz.value=S.schedule.timezone||CFG.TIMEZONE;const ex=document.getElementById('a-exp');if(ex)ex.value=S.schedule.expirationDate||'';const mx=document.getElementById('a-max');if(mx)mx.value=S.schedule.maxParticipants||30;const sl=document.getElementById('share-link');if(sl)sl.value=window.location.href.split('?')[0];}
+function copyLink(){const l=document.getElementById('share-link').value;navigator.clipboard.writeText(l).then(()=>toast('Link copied!','ok')).catch(()=>{document.getElementById('share-link').select();document.execCommand('copy');toast('Copied','ok');});}
+
+// ── POLLING ──────────────────────────────────────────────────────
+function startPoll(){stopPoll();S.pollTimer=setInterval(async()=>{try{const r=await api({action:'getSignups'});S.signups=r.signups||[];if(S.isAdmin){renderSupsTab();renderAdminSched();}else{renderP();}}catch(e){}},30000);}
+function stopPoll(){if(S.pollTimer){clearInterval(S.pollTimer);S.pollTimer=null;}}
+
+// ── INIT ─────────────────────────────────────────────────────────
+async function init(){
+  showLoad('Connecting to scheduler…');
+  initEmail();
+  if(!CFG.APPS_SCRIPT_URL||CFG.APPS_SCRIPT_URL==='YOUR_APPS_SCRIPT_URL'){
+    hideLoad();showView('view-p');
+    document.getElementById('p-sched').innerHTML=`<div class="banner"><div class="banner-icon">⚙</div><div class="banner-text"><h3>Setup Required</h3><p>Deploy <strong>AppScript.gs</strong> to Google Apps Script and paste the Web App URL into <code>APPS_SCRIPT_URL</code> at the top of this HTML file.</p><p style="margin-top:8px;font-size:13px">See the setup comments at the top of this file for step-by-step instructions.</p></div></div>`;
+    return;
+  }
+  try{
+    await api({action:'initSheets'});
+    await loadAll();
+    const token=new URLSearchParams(window.location.search).get('token');
+    if(token){await loadEditView(token);}else{showView('view-p');renderP();}
+    startPoll();
+  }catch(e){
+    showView('view-p');
+    document.getElementById('p-sched').innerHTML=`<div class="banner"><div class="banner-icon">⚠</div><div class="banner-text"><h3>Connection Error</h3><p>${esc(e.message)}</p><p style="margin-top:6px;font-size:13px">Check that your Apps Script URL is correct and deployed with "Anyone" access.</p></div></div>`;
+  }finally{hideLoad();}
+}
+
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
