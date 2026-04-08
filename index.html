@@ -120,7 +120,8 @@ textarea{resize:vertical;min-height:80px}
 .bc-lbl{font-weight:700;font-size:15px;margin-bottom:4px}
 .bc.tk .bc-lbl,.bc.bl .bc-lbl{color:var(--gray-500)}
 .bc-time{font-size:13px;color:var(--gray-500)}
-.bc-status{margin-top:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.bc-booked-by{margin-top:8px;font-size:12px;font-weight:600;color:var(--gray-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bc-status{margin-top:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .bc.tk .bc-status{color:var(--taken)}.bc.bl .bc-status{color:var(--gray-500)}.bc.av .bc-status{color:var(--gray-400)}.bc.sel .bc-status{color:var(--red)}
 .bc-check{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;opacity:0;transition:var(--tr)}
 .bc.sel .bc-check{opacity:1}
@@ -186,7 +187,7 @@ tr:hover td{background:var(--gray-50)}
 <header id="app-header">
   <div class="hdr">
     <div class="logo-wrap">
-      <div class="logo-text"><span class="l1">Miltenyi</span><span class="l2">&nbsp;Imaging</span></div>
+      <div class="logo-text"><span class="l1">Miltenyi</span><span class="l2">&nbsp;Biotec</span></div>
       <div class="logo-div"></div>
       <div class="logo-tag">Demo Scheduler</div>
     </div>
@@ -199,7 +200,7 @@ tr:hover td{background:var(--gray-50)}
   <!-- LOGIN -->
   <div id="view-login" style="display:none">
     <div class="login-card">
-      <div style="margin-bottom:24px"><div class="logo-text" style="justify-content:center;display:flex"><span class="l1">Miltenyi</span><span class="l2">&nbsp;Imaging</span></div></div>
+      <div style="margin-bottom:24px"><div class="logo-text" style="justify-content:center;display:flex"><span class="l1">Miltenyi</span><span class="l2">&nbsp;Biotec</span></div></div>
       <h2>Admin Login</h2><p>Enter your admin password to manage the schedule</p>
       <div class="fg"><label>Password <span class="req">*</span></label><input type="password" id="pw" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <button class="btn btn-p btn-full" onclick="doLogin()">Sign In</button>
@@ -385,6 +386,7 @@ function fmt12(t){ if(!t)return''; const[h,m]=t.split(':').map(Number); return `
 function fmtDate(d){ if(!d)return''; try{return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(e){return d;} }
 function fmtTs(ts){ if(!ts)return'—'; try{return new Date(ts).toLocaleString('en-US',{timeZone:S.schedule.timezone,month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});}catch(e){return ts;} }
 const isTaken = (d,b) => S.signups.some(s=>s.status==='active'&&s.slots.includes(sid(d,b)));
+function getBookedBy(d,b){ const su=S.signups.find(s=>s.status==='active'&&s.slots.includes(sid(d,b))); if(!su)return''; return su.isLabGroup&&su.labGroupName ? su.labGroupName : su.name; }
 const activeCnt = () => S.signups.filter(s=>s.status==='active').length;
 const isFull = () => activeCnt() >= (S.schedule.maxParticipants||30);
 
@@ -466,7 +468,7 @@ function renderP(){
   const con=document.getElementById('p-sched'),noMsg=document.getElementById('no-days-p');
   if(!sch.days?.length){con.innerHTML='';noMsg.style.display='';document.getElementById('signup-form-sec').style.display='none';return;}
   noMsg.style.display='none';
-  con.innerHTML=sch.days.map(day=>`<div class="sched-sec"><h2>${esc(day.label)} ${day.date?`<span class="date-tag">${fmtDate(day.date)}</span>`:''}</h2><div class="blocks-grid">${day.blocks.map(b=>{const tk=isTaken(day.id,b.id),bl=b.status==='blocked',sel=S.selSlots.includes(sid(day.id,b.id));let cls='bc ',lbl='';if(bl){cls+='bl';lbl='Unavailable';}else if(tk){cls+='tk';lbl='Taken';}else if(sel){cls+='sel av';lbl='Selected ✓';}else{cls+='av';lbl='Available';}return`<div class="${cls}" ${!bl&&!tk&&!isFull()?`onclick="toggleSlot('${day.id}','${b.id}')"`:''}><div class="bc-check">✓</div><div class="bc-lbl">${esc(b.label)}</div><div class="bc-time">${fmt12(b.startTime)} – ${fmt12(b.endTime)}</div><div class="bc-status">${lbl}</div></div>`;}).join('')}</div></div>`).join('');
+  con.innerHTML=sch.days.map(day=>`<div class="sched-sec"><h2>${esc(day.label)} ${day.date?`<span class="date-tag">${fmtDate(day.date)}</span>`:''}</h2><div class="blocks-grid">${day.blocks.map(b=>{const tk=isTaken(day.id,b.id),bl=b.status==='blocked',sel=S.selSlots.includes(sid(day.id,b.id)),bookedBy=tk?getBookedBy(day.id,b.id):'';let cls='bc ',lbl='';if(bl){cls+='bl';lbl='Unavailable';}else if(tk){cls+='tk';lbl='Reserved';}else if(sel){cls+='sel av';lbl='Selected ✓';}else{cls+='av';lbl='Available';}return`<div class="${cls}" ${!bl&&!tk&&!isFull()?`onclick="toggleSlot('${day.id}','${b.id}')"`:''}><div class="bc-check">✓</div><div class="bc-lbl">${esc(b.label)}</div><div class="bc-time">${fmt12(b.startTime)} – ${fmt12(b.endTime)}</div>${tk&&bookedBy?`<div class="bc-booked-by">👤 ${esc(bookedBy)}</div>`:''}<div class="bc-status">${lbl}</div></div>`;}).join('')}</div></div>`).join('');
   updateForm();
 }
 function toggleSlot(d,b){if(isFull()&&!S.selSlots.includes(sid(d,b)))return;const s=sid(d,b),i=S.selSlots.indexOf(s);if(i>=0)S.selSlots.splice(i,1);else S.selSlots.push(s);renderP();}
